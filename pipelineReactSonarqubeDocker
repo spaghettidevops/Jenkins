@@ -87,15 +87,21 @@ pipeline {
   
     
          
-    stage('remove old images') {
-        steps {
-        //remove all unused images and volumes on docker 
-            sh "docker system prune --volumes -f"
-        }
-    }
-      
-      
-      
-        
+   
+//end stages      
   }
+
+ post {
+  always {
+    // eseguiti sempre anche se la pipeline fallisce
+
+     // clean docker server from unused images an volumes(potentially dangerous)
+     sh "docker system prune --volumes -f"
+   
+      // email notification about the build status require email extention plugin installed and configured on Jenkins
+      emailext body: "Pipeline Job ${JOB_NAME} build number: (${BUILD_NUMBER}) is completed whit the status: ${currentBuild.result}, check the attached log files", /* recipientProviders: [[$class: 'DevelopersRecipientProvider'], [$class: 'RequesterRecipientProvider']],*/ subject: "JENKINS JOB ${JOB_NAME} RESULT" , attachLog: true, to: "sviluppatore@esempio.it, sviluppatore2@esempio.it"
+  }
+
+
+
 }
