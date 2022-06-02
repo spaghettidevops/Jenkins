@@ -1,0 +1,101 @@
+properties([disableConcurrentBuilds()])  
+pipeline {
+   environment {
+    registry = 'dockerhubRepoName/project-name'
+    registryCredential = 'credentialsIdDockerhb'  /*Credentials for docker must be created n jenkins.. */
+    dockerImage = ''
+  }
+  agent any
+  tools {
+    nodejs 'NodeJs'
+  }
+  options {
+    // clean before build
+    skipDefaultCheckout(true)
+  }
+  stages {
+    stage('Clone SCM for sonar') {
+      steps {
+        // Clean before build
+        cleanWs()
+        git branch: 'develop',
+          credentialsId: 'credentialsIdGit',       /*Credentials must be created n jenkins.. */
+          url: 'https://gitlab.com/repoaccount/project-name'
+      }
+    }
+    stage('SonarQube analysis') {
+      steps {
+       // this stage execute code scan trought the Sonarqube Scanner,"tool" name must be set on the Sonarube scanner plugin in Jenkins
+       
+       script {
+          def scannerHome = tool 'sonarscan';    /*tool name must be set on the Sonarube sc anner plugin in Jenkins*/
+          withSonarQubeEnv('sonarqube') {
+            sh "${tool("sonarscan")}/bin/sonar-scanner -Dsonar.projectKey=project-name -Dsonar.projectName=project-name"
+          }
+        }
+      }
+    }
+  
+  /*  stage("Quality gate") {
+  //stage for quality gate: pipeline abort build in case the result of the Sonarqube scan is different from OK
+      steps {
+       script {
+          def qualitygate = waitForQualityGate()
+         sleep(5)
+         if (qualitygate.status != "OK") {
+          waitForQualityGate abortPipeline: true
+          }
+        }
+      }
+    }
+    */
+  
+   stage('Building image') {
+   //build image using dockerfile that is in the project repo
+      steps {
+        script {
+          dockerImage = docker.build registry + ":$BUILD_NUMBER"
+        }
+      }
+    } 
+    
+    
+  stage('Deploy Image') {
+  //push image on dockerhub
+      steps{
+        script {
+          docker.withRegistry( '', registryCredential ) {
+            dockerImage.push()
+          }
+        }
+      }
+    }
+    stage('Remove Unused docker image') {
+      steps{
+        sh "docker rmi $registry:$BUILD_NUMBER"
+      }
+    }
+  
+  
+  stage('Deploy') {
+  //deploy the image on the server
+        steps {
+            sh "docker rm -f project-name || true"
+            sh "docker run --name project-name -p 3200:80 -d $registry:$BUILD_NUMBER"
+        }
+    }
+  
+    
+         
+    stage('remove old images') {
+        steps {
+        //remove all unused images and volumes on docker 
+            sh "docker system prune --volumes -f"
+        }
+    }
+      
+      
+      
+        
+  }
+}
