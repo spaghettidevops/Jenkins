@@ -1,7 +1,7 @@
 properties([disableConcurrentBuilds()])  
 pipeline {
    environment {
-    projectName = 'progetto'
+    projectName = 'progetto-x'
     registry = "dockerhubRepoName/$projectName"
     registryCredential = 'credentialsIdDockerhb'  /*Credentials for docker must be created n jenkins.. */
     dockerImage = ''
