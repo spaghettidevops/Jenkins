@@ -1,69 +1,171 @@
 pipeline {
     agent any
     tools {
-        jdk 'JDK 11'
-        sonarscan 'SonarQube Scanner'
+    maven 'maven1'
     }
+ parameters {
+        choice(name: 'ambiente', choices: ['ambiente1', 'ambiente2'], description: 'Choose the team environment')
+        choice(name: 'app', choices: ['app1', 'app2'], description: 'Choose the App')
+    }
+
+
+   
     environment {
-        GIT_URL = 'https://github.com/myuser/myproject.git'
-        GIT_BRANCH = 'main'
-        PROJECT_NAME = 'MyProject'
-        JACOCO_AGENT_PORT = 6989
-        JACOCO_AGENT_ADDRESS = '192.168.1.22'
-        REPORT_DIR = 'target/site/jacoco'
-        SONAR_PROJECT_KEY = 'myproject'
+        ipAddress = ''
+        port = ''
+
+        projectName = "${params.ambiente}-MyAPP-${params.app}-CodeCoverage"
     }
     stages {
-        stage('Checkout') {
+        stage('Setup ip and port for remote jacocoagent') {
             steps {
-                // Checkout source code from Git repository
-                checkout([
-                    $class: 'GitSCM',
-                    branches: [[name: env.GIT_BRANCH]],
-                    doGenerateSubmoduleConfigurations: false,
-                    extensions: [[$class: 'CloneOption', depth: 1]],
-                    submoduleCfg: [],
-                    userRemoteConfigs: [[url: env.GIT_URL]]
-                ])
-            }
-        }
-        stage('Build and analyze with Jacoco') {
-            steps {
-                // Configure Jacoco plugin to connect to remote Jacoco server on the remote machine and retrieve .exec file
-                jacoco(
-                    execPattern: '**/*.exec',
-                    classDumpDir: 'target/jacoco/classpathdumps',
-                    excludes: '',
-                    includes: '**/*',
-                    address: env.JACOCO_AGENT_ADDRESS,
-                    port: env.JACOCO_AGENT_PORT
-                )
-                // Generate code coverage report using Maven and Jacoco
-                sh 'mvn clean install'
-                sh 'mvn jacoco:report'
-            }
-        }
-        stage('Static code analysis with SonarQube') {
-            steps {
-                // Analyze source code with SonarQube scanner
-                withSonarQubeEnv('sonarqube') {
-                    sh "${tool('sonarscan')}/bin/sonar-scanner -Dsonar.projectKey=$SONAR_PROJECT_KEY -Dsonar.projectName=$PROJECT_NAME -Dsonar.sources=src -Dsonar.java.binaries=target/classes -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml"
+                script {
+                    switch (params.ambiente) {
+                        case 'ambiente1':
+                            switch (params.app) {
+                                case 'app1':
+                                    ipAddress = '1.1.1.1'
+                                    port = '6988'
+                                    break
+                                case 'app2':
+                                    ipAddress = '192.168.1.2'
+                                    port = '5678'
+                                    break
+                            }
+                            break
+                        case 'ambiente2':
+                            switch (params.app) {
+                                case 'app1':
+                                    ipAddress = '192.168.2.1'
+                                    port = '1234'
+                                    break
+                                case 'app2':
+                                    ipAddress = '192.168.2.2'
+                                    port = '5678'
+                                    break
+                            }
+                            break
+                        default:
+                            echo "Incorrect environment! "
+                            break
+                    }
                 }
             }
         }
-    }
-    post {
-        always {
-            // Publish code coverage report on Jenkins server
-            publishHTML([
-                allowMissing: true,
-                alwaysLinkToLastBuild: false,
-                keepAll: true,
-                reportDir: env.REPORT_DIR,
-                reportFiles: 'index.html',
-                reportName: 'Code Coverage Report'
-            ])
+
+
+    stage('Clone SCM for classes directory') {
+      steps {
+        // Clean before build
+        //cleanWs()
+        git branch: 'master',
+      
+          url: 'https://github.com/Ale-RM/java-app-example.git'
+      }
+      }
+
+    stage('Build for generate classes directory') {
+      steps {
+        
+        sh 'mvn clean install'
+      }
+
+}
+
+stage('Jacoco Report') {
+            steps {
+                script {
+                    def jacocoScript = """
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.example</groupId>
+  <artifactId>${env.projectName}</artifactId>
+  <version>1.0</version>
+
+  <properties>
+    <jacoco.version>0.8.5</jacoco.version>
+    <jacoco.address>${ipAddress}</jacoco.address>
+    <jacoco.port>${port}</jacoco.port>
+    <jacoco.classdumpdir>/opt/jacoco/dump</jacoco.classdumpdir>
+  </properties>
+
+  <build>
+    <plugins>
+      <!-- Jacoco Maven plugin -->
+       <plugin>
+  <groupId>org.jacoco</groupId>
+  <artifactId>jacoco-maven-plugin</artifactId>
+  <version>0.8.6</version>
+  <executions>
+    <execution>
+      <id>dump</id>
+      <phase>post-integration-test</phase>
+      <goals>
+        <goal>dump</goal>
+      </goals>
+      <configuration>
+        <address>jacoco.address</address>
+        <destFile>./jacoco.exec</destFile>
+        <port>jacoco.port</port>
+        <reset>false</reset>
+        <append>false</append>
+      </configuration>
+    </execution>
+    <execution>
+      <id>default-report</id>
+      <phase>verify</phase>
+      <goals>
+        <goal>report</goal>
+      </goals>
+        <configuration>
+        <dataFile>./jacoco.exec</dataFile>
+        <outputDirectory>./jacoco-report</outputDirectory>
+        <classDirectories>
+          <directory>./target/classes</directory>
+        </classDirectories>
+      </configuration>
+    </execution>
+  </executions>
+</plugin>
+    </plugins>
+  </build>
+</project>
+                   
+        """
+
+                    writeFile file: 'jacoco-pom.xml', text: jacocoScript
+
+                    sh 'mvn jacoco:dump jacoco:report -f jacoco-pom.xml'
+                }
+            }
+}
+     
+     stage('SonarQube') {
+    steps {
+        withSonarQubeEnv('mysonar-lab') {
+            sh "${tool("sonarscan")}/bin/sonar-scanner \
+                -Dsonar.projectKey=$projectName \
+                -Dsonar.projectName=$projectName \
+                -Dsonar.projectVersion=1.0 \
+                -Dsonar.sources=. \
+                -Dsonar.language=gosu \
+                -Dsonar.java.binaries=target/classes \
+                -Dsonar.exclusions='**/generated/**,**/vendor/**' \
+                -Dsonar.coverage.jacoco.xmlReportPaths=./target/site/jacoco/jacoco.xml \
+                -Dsonar.host.url=http://sonarserverip:9000 \
+                -Dsonar.login=tokensonar"
         }
     }
 }
-  
+     
+     
+     
+     
+         
+    }
+    
+}
