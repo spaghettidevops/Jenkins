@@ -7,13 +7,22 @@ pipeline {
         choice(name: 'ambiente', choices: ['ambiente1', 'ambiente2'], description: 'Choose the team environment')
         choice(name: 'app', choices: ['app1', 'app2'], description: 'Choose the App')
     }
+pipeline {
+    agent any
+    tools {
+        maven 'maven1'
+    }
+    parameters {
+        choice(name: 'ambiente', choices: ['ambiente1', 'ambiente2'], description: 'Choose the team environment')
+        choice(name: 'app', choices: ['app1', 'app2'], description: 'Choose the App')
+    }
 
-
-   
     environment {
         ipAddress = ''
         port = ''
-
+        serverName = ''
+        artifactPath = ''
+        app = ''
         projectName = "${params.ambiente}-MyAPP-${params.app}-CodeCoverage"
     }
     stages {
@@ -22,26 +31,36 @@ pipeline {
                 script {
                     switch (params.ambiente) {
                         case 'ambiente1':
+                            serverName = 'server1'
                             switch (params.app) {
                                 case 'app1':
                                     ipAddress = '1.1.1.1'
                                     port = '6988'
+                                    artifactPath = 'applicazione1'
+                                    app = 'app1'
                                     break
                                 case 'app2':
                                     ipAddress = '192.168.1.2'
                                     port = '5678'
+                                    artifactPath = 'applicazione2'
+                                    app = 'app2'
                                     break
                             }
                             break
                         case 'ambiente2':
+                            serverName = 'server2'
                             switch (params.app) {
                                 case 'app1':
                                     ipAddress = '192.168.2.1'
                                     port = '1234'
+                                    artifactPath = 'applicazione1'
+                                    app = 'app1'
                                     break
                                 case 'app2':
                                     ipAddress = '192.168.2.2'
                                     port = '5678'
+                                    artifactPath = 'applicazione2'
+                                    app = 'app2'
                                     break
                             }
                             break
@@ -53,24 +72,18 @@ pipeline {
             }
         }
 
+        stage('Copy WAR file and extract classes') {
+            steps {
+                script {
+                    sh "cp /var/lib/jenkins/Artifact/${serverName}/${artifactPath}/${app}.war ."
+                    sh "unzip ${app}.war -d extracted_war"
+                    sh "mv extracted_war/WEB-INF/classes ."
+                }
+            }
+        }
 
-    stage('Clone SCM for classes directory') {
-      steps {
-        // Clean before build
-        //cleanWs()
-        git branch: 'master',
-      
-          url: 'https://github.com/Ale-RM/java-app-example.git'
-      }
-      }
+   
 
-    stage('Build for generate classes directory') {
-      steps {
-        
-        sh 'mvn clean install'
-      }
-
-}
 
 stage('Jacoco Report') {
             steps {
