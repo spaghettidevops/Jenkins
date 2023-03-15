@@ -4,20 +4,10 @@ pipeline {
     maven 'maven1'
     }
  parameters {
-        choice(name: 'ambiente', choices: ['ambiente1', 'ambiente2'], description: 'Choose the team environment')
-        choice(name: 'app', choices: ['app1', 'app2'], description: 'Choose the App')
+        choice(name: 'ambiente', choices: ['ambiente1', 'ambiente2'], description: 'Scegli l\'ambiente')
+        choice(name: 'app', choices: ['app1', 'app2'], description: 'Scegli l\'applicazione')
     }
-pipeline {
-    agent any
-    tools {
-        maven 'maven1'
-    }
-    parameters {
-        choice(name: 'ambiente', choices: ['ambiente1', 'ambiente2'], description: 'Choose the team environment')
-        choice(name: 'app', choices: ['app1', 'app2'], description: 'Choose the App')
-    }
-
-    environment {
+environment {
         ipAddress = ''
         port = ''
         serverName = ''
@@ -34,7 +24,7 @@ pipeline {
                             serverName = 'server1'
                             switch (params.app) {
                                 case 'app1':
-                                    ipAddress = '1.1.1.1'
+                                    ipAddress = '5.5.5.5'
                                     port = '6988'
                                     artifactPath = 'applicazione1'
                                     app = 'app1'
@@ -75,14 +65,16 @@ pipeline {
         stage('Copy WAR file and extract classes') {
             steps {
                 script {
-                    sh "cp /var/lib/jenkins/Artifact/${serverName}/${artifactPath}/${app}.war ."
+                    sh "cp /var/jenkins_home/artifact/${serverName}/${artifactPath}/${app}.war ."
                     sh "unzip ${app}.war -d extracted_war"
-                    sh "mv extracted_war/WEB-INF/classes ."
+                    //sh "mv extracted_war/WEB-INF/classes ."
                 }
             }
         }
 
+  
    
+
 
 
 stage('Jacoco Report') {
@@ -138,7 +130,7 @@ stage('Jacoco Report') {
         <dataFile>./jacoco.exec</dataFile>
         <outputDirectory>./jacoco-report</outputDirectory>
         <classDirectories>
-          <directory>./target/classes</directory>
+          <directory>./extracted_war/WEB-INF/classes</directory>
         </classDirectories>
       </configuration>
     </execution>
@@ -167,10 +159,10 @@ stage('Jacoco Report') {
                 -Dsonar.sources=. \
                 -Dsonar.language=gosu \
                 -Dsonar.java.binaries=target/classes \
-                -Dsonar.exclusions='**/generated/**,**/vendor/**' \
+                -Dsonar.exclusions='**/generated/**,**/vendor/**,./jacoco-pom.xml' \
                 -Dsonar.coverage.jacoco.xmlReportPaths=./target/site/jacoco/jacoco.xml \
-                -Dsonar.host.url=http://sonarserverip:9000 \
-                -Dsonar.login=tokensonar"
+                -Dsonar.host.url=http://5.5.5.5:9000 \
+                -Dsonar.login=mysonartoken"
         }
     }
 }
@@ -178,7 +170,22 @@ stage('Jacoco Report') {
      
      
      
-         
+     
+     
+     
+     
+     
+     
+     
+     
+     
+     
+     
+     
+     
+     
+     
+       
     }
     
 }
