@@ -1,0 +1,166 @@
+def applications = [
+    [name: 'app1', port: '6988', artifactPath: 'applicazione1'],
+    [name: 'app2', port: '6988', artifactPath: 'applicazione2']
+]
+
+pipeline {
+    agent any
+    tools {
+        maven 'maven1'
+    }
+    environment {
+        serverIPAddress = 'serveriphere' 
+        serverName = 'server1'
+        projectName = ''
+        
+    }
+    stages {
+       
+                     stage("Create application directory ") {
+                            steps {
+                                script {
+                                   applications.each { app ->
+                                    // Create the application directory in the workspace
+                                    sh "mkdir -p ${app.name}"
+                                }
+                            }
+                        }
+                    }
+
+                        stage("Copy WAR file and extract classes ") {
+                            steps {
+                                script {
+                                     applications.each { app ->
+                                     dir("${app.name}") {
+                                        sh "cp /var/jenkins_home/artifact/${serverName}/${app.artifactPath}/${app.name}.war ./${app.name}"
+                                        sh "rm -rf ./extractedwar"
+                                        sh """
+                                        mkdir extractedwar &&
+                                        cp ${app.name}.war extractedwar &&
+                                        cd extractedwar &&
+                                        unzip ${app.name}.war &&
+                                        find . -name "*.jar" -exec sh -c 'jar -xf {} && rm {}' \\;
+                                        """
+                                        sh "rm -rf ./target"
+                                        sh "mkdir -p ./target/classes"
+                                        sh "cp -r ./extractedwar/* ./target/classes"
+                                        echo "$app"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                        
+                        stage("Tunnel SSH ") {
+                            steps {
+                                script {
+                                      applications.each { app ->
+                                    sh "ssh -i /var/jenkins_home/mypem -f -L 127.0.0.1:${app.port}:localhost:${app.port} ec2-user@${serverIpAddress} -N"
+                                }
+                            }
+                        }
+                    }
+                        stage("Jacoco Report") {
+                            steps {
+                                script {
+                                      applications.each { app ->
+                                        projectName = "${serverName}-${app.name}-CodeCoverage"
+                                    def jacocoScript = """
+                                     <project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.example</groupId>
+  <artifactId>${projectName}</artifactId>
+  <version>1.0</version>
+
+  <properties>
+    <jacoco.version>0.8.8</jacoco.version>
+    <jacoco.address>${env.serverIpAddress}</jacoco.address>
+    <jacoco.port>${app.port}</jacoco.port>
+    <jacoco.classdumpdir>./sbagliato</jacoco.classdumpdir>
+  </properties>
+
+  <build>
+    <plugins>
+      <!-- Jacoco Maven plugin -->
+       <plugin>
+  <groupId>org.jacoco</groupId>
+  <artifactId>jacoco-maven-plugin</artifactId>
+  <version>0.8.8</version>
+  <executions>
+    <execution>
+      <id>dump</id>
+      <phase>post-integration-test</phase>
+      <goals>
+        <goal>dump</goal>
+      </goals>
+      <configuration>
+        <address>jacoco.address</address>
+        <destFile>./jacoco.exec</destFile>
+        <port>jacoco.port</port>
+        <reset>false</reset>
+        <append>false</append>
+      </configuration>
+    </execution>
+    <execution>
+      <id>default-report</id>
+      <phase>verify</phase>
+      <goals>
+        <goal>report</goal>
+      </goals>
+        <configuration>
+        <dataFile>./jacoco.exec</dataFile>
+        <outputDirectory>./jacoco-report</outputDirectory>
+        <classDirectories>
+          <directory>./dump</directory>
+        </classDirectories>
+      </configuration>
+    </execution>
+  </executions>
+</plugin>
+    </plugins>
+  </build>
+</project>
+
+
+                                    """
+
+                                    dir("${app.name}") {
+                                        writeFile file: 'jacoco-pom.xml', text: jacocoScript
+                                        sh 'mvn jacoco:dump jacoco:report -f jacoco-pom.xml'
+                                    }
+                                }
+                            }
+                        }
+                    }
+                        stage("SonarQube Scan") {
+                            steps {
+                                script {
+
+                               applications.each { app ->    
+                                projectName = "${serverName}-${app.name}-CodeCoverage"
+                                dir("${app.port}") {
+                                    withSonarQubeEnv('mysonar-lab') {
+                                        sh "${tool("sonarscan")}/bin/sonar-scanner \
+                                            -Dsonar.projectKey=$projectName \
+                                            -Dsonar.projectName=$projectName \
+                                            -Dsonar.projectVersion=1.0 \
+                                            -Dsonar.inclusions=./target/site/jacoco/jacoco.xml \
+                                            -Dsonar.exclusions='**/generated/**,**/vendor/**,./jacoco-pom.xml' \
+                                            -Dsonar.coverage.jacoco.xmlReportPaths=./target/site/jacoco/jacoco.xml \
+                                            -Dsonar.host.url=http://54.75.99.205:9000 \
+                                            -Dsonar.login=tokenhere"
+                                     }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        
+
+
