@@ -1,0 +1,49 @@
+pipeline {
+    agent any
+    environment {
+        AWS_PROFILE = 'c-account-1' 
+        projectName = 'progetto-x'
+        registry = "aws_account_id.dkr.ecr.region.amazonaws.com/$projectName"
+        registryCredential = 'credentialsIdECR'  
+        dockerImage = ''
+    }
+    stages {
+        stage('Clone SCM') {
+            steps {
+                git branch: 'master',
+                credentialsId: 'credentialsIdGit', 
+                url: 'https://gitlab.com/repoaccount/project-name'
+            }
+        }
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    dockerImage = docker.build registry + ":$BUILD_NUMBER"
+                }
+            }
+        } 
+        stage('Push Docker Image') {
+            steps {
+                script {
+                    docker.withRegistry( registry, registryCredential ) {
+                        dockerImage.push()
+                    }
+                }
+            }
+        }
+        stage('Update ECS Service') {
+            steps {
+                sh """
+                aws ecs register-task-definition --cli-input-json file://taskdefinition.json
+                aws ecs update-service --service my-service --task-definition my-task-family --cluster my-cluster
+                """
+            }
+        }
+    }
+    post {
+        always {
+            sh "docker system prune -f"
+            mail body: "Pipeline Job ${JOB_NAME} (${BUILD_NUMBER}) completed with result: ${currentBuild.result}", subject: "Jenkins Job ${JOB_NAME} Result", to: "sviluppatore@esempio.it, sviluppatore2@esempio.it"
+        }
+    }
+}
