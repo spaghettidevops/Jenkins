@@ -1,0 +1,38 @@
+pipeline {
+    agent any
+    environment {
+        registry = 'xxxxxxxxxxxx.dkr.ecr.your-region.amazonaws.com' //Ecr
+        repository = 'your-repository-name' // repository ECR
+        dockerImage = ''
+        awsCredentialId = 'yorcredential' // 
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: 'main', 
+                  credentialsId: 'your-git-credentials', 
+                  url: 'https://github.com/your-username/your-repo.git'
+            }
+        }
+        
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    def dockerBuildContext = './source/frontend'
+                    dockerImage = docker.build("${registry}/${repository}:${env.BUILD_NUMBER}", dockerBuildContext)
+                }
+            }
+        }
+        
+        stage('Push Docker Image to ECR') {
+            steps {
+                script {
+                    docker.withRegistry("https://${registry}", awsCredentialId) {
+                        dockerImage.push()
+                    }
+                }
+            }
+        }
+    }
+}
