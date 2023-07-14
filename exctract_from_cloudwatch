@@ -185,6 +185,20 @@ stage('Get IP Info') {
         }
     }
 }
+stage('Get IP Info') {
+    steps {
+        script {
+            sh '''
+            while IFS= read -r ipLine && IFS= read -r countLine; do
+                ip=$(echo $ipLine | awk -F'"' '{print $4}')
+                count=$(echo $countLine | awk -F'"' '{print $4}')
+                ipInfo=$(curl -s ipinfo.io/${ip})
+                echo "${ip},${count},${ipInfo}" >> ip_info.txt
+            done < logs.json
+            '''
+        }
+    }
+}
 
 
 
