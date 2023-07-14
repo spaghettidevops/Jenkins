@@ -85,6 +85,37 @@ stage('Get IP Info') {
 }
 
 
+stage('Get IP Info') {
+    steps {
+        script {
+            sh '''
+            for log in $(jq -c '.results[]' logs.json); do
+                ip=$(echo $log | jq -r '.[] | select(.field=="ipAddress") | .value')
+                count=$(echo $log | jq -r '.[] | select(.field=="count()") | .value')
+                ipInfo=$(curl -s ipinfo.io/${ip})
+                echo "${ip},${count},${ipInfo}" >> ip_info.txt
+            done
+            '''
+        }
+    }
+}
+stage('Get IP Info') {
+    steps {
+        script {
+            def logsJson = readJSON file: 'logs.json'
+            def ipInfoList = []
+            for (log in logsJson) {
+                def ip = log.find { it.field == 'ipAddress' }.value
+                def count = log.find { it.field == 'count()' }.value
+                def ipInfo = sh(script: "curl ipinfo.io/${ip}", returnStdout: true).trim()
+                ipInfoList.add("${ip},${count},${ipInfo}")
+            }
+            writeFile file: 'ip_info.txt', text: ipInfoList.join('\n')
+        }
+    }
+}
+
+
 
 
 
