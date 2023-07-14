@@ -105,8 +105,15 @@ stage('Get IP Info') {
             def logsJson = readJSON file: 'logs.json'
             def ipInfoList = []
             for (log in logsJson) {
-                def ip = log.find { it.field == 'ipAddress' }.value
-                def count = log.find { it.field == 'count()' }.value
+                def ip = ""
+                def count = ""
+                for (field in log) {
+                    if (field.field == 'ipAddress') {
+                        ip = field.value
+                    } else if (field.field == 'count()') {
+                        count = field.value
+                    }
+                }
                 def ipInfo = sh(script: "curl ipinfo.io/${ip}", returnStdout: true).trim()
                 ipInfoList.add("${ip},${count},${ipInfo}")
             }
@@ -114,9 +121,6 @@ stage('Get IP Info') {
         }
     }
 }
-
-
-
 
 
 
