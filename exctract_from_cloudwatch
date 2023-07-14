@@ -202,6 +202,23 @@ stage('Get IP Info') {
 
 
 
+stage('Get IP Info') {
+    steps {
+        script {
+            sh '''
+            while IFS= read -r line; do
+                if echo $line | grep -q 'ipAddress'; then
+                    ip=$(echo $line | sed -n 's/.*ipAddress": "\([^"]*\)".*/\1/p')
+                elif echo $line | grep -q 'count()'; then
+                    count=$(echo $line | sed -n 's/.*count()": "\([^"]*\)".*/\1/p')
+                    ipInfo=$(curl -s ipinfo.io/${ip})
+                    echo "${ip},${count},${ipInfo}" >> ip_info.txt
+                fi
+            done < logs.json
+            '''
+        }
+    }
+}
 
 
 
