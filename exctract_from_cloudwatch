@@ -66,3 +66,46 @@ with open('output.csv', 'w', newline='') as file:
         }
     }
 }
+
+
+stage('Get IP Info') {
+    steps {
+        script {
+            def logsJson = readJSON file: 'logs.json'
+            def ipInfoList = []
+            for (log in logsJson) {
+                def ip = log.find { it.field == 'ipAddress' }.value
+                def count = log.find { it.field == 'count()' }.value
+                def ipInfo = sh(script: "curl ipinfo.io/${ip}", returnStdout: true).trim()
+                ipInfoList.add("${ip},${count},${ipInfo}")
+            }
+            writeFile file: 'ip_info.txt', text: ipInfoList.join('\n')
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
