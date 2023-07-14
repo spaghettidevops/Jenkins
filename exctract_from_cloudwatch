@@ -155,6 +155,20 @@ stage('Get IP Info') {
 
 
 
+stage('Get IP Info') {
+    steps {
+        script {
+            sh '''
+            while IFS= read -r log; do
+                ip=$(echo $log | jq -r '.ipAddress')
+                count=$(echo $log | jq -r '."count()"')
+                ipInfo=$(curl -s ipinfo.io/${ip})
+                echo "${ip},${count},${ipInfo}" >> ip_info.txt
+            done < logs.json
+            '''
+        }
+    }
+}
 
 
 
