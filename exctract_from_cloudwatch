@@ -447,6 +447,32 @@ EOF
         }
     }
 }
+stage('Get IP Info') {
+    steps {
+        script {
+            def userNames = params.USER_NAMES.split(',')
+            for (userName in userNames) {
+                sh """
+                rm -f ${userName}_ip_info.txt
+                while IFS= read -r line; do
+                    if echo \$line | grep -q 'ipAddress'; then
+                        ip=\$(echo \$line | sed -n 's/.*ipAddress": "\\([^"]*\\)".*/\\1/p')
+                    elif echo \$line | grep -q 'count()'; then
+                        count=\$(echo \$line | sed -n 's/.*count()": "\\([^"]*\\)".*/\\1/p')
+                        if [[ -n \$ip && -n \$count ]]; then
+                            ipInfo=\$(curl -s ipinfo.io/\${ip} | jq -r '[.city, .region, .loc] | join(",")')
+                            echo "\${ip},\${count},\${ipInfo}" >> ${userName}_ip_info.txt
+                            ip=""
+                            count=""
+                        fi
+                    fi
+                done < ${userName}_logs.json
+                """
+            }
+        }
+    }
+}
+
 
 
 
