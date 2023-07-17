@@ -474,5 +474,17 @@ stage('Get IP Info') {
 }
 
 
+stage('Get Query Results') {
+    steps {
+        script {
+            def userNames = params.USER_NAMES.split(';')
+            for (userName in userNames) {
+                // Replace spaces with underscores in the file name
+                def fileName = userName.replaceAll(' ', '_')
+                def logs = sh(script: "aws logs get-query-results --query-id ${queryId} | jq -r '.results[] | map({(.field): .value}) | add' > ${fileName}_logs.json", returnStdout: true).trim()
+            }
+        }
+    }
+}
 
 
