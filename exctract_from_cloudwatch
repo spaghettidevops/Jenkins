@@ -325,6 +325,37 @@ stage('Create Excel File') {
         }
     }
 }
+stage('Create Excel File') {
+    steps {
+        script {
+            sh """
+            python3 -m venv pyvenv
+            . pyvenv/bin/activate
+            pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host=files.pythonhosted.org pandas openpyxl
+
+            python3 <<EOF
+import pandas as pd
+
+# Read data from CSV file
+data = pd.read_csv('${fileName}_ip_info.txt', header=None)
+
+# Specify column names
+data.columns = ['IP Address', 'BE request count', 'City', 'Region', 'Lat', 'Long']
+
+# Combine 'Lat' and 'Long' into 'GPS Location'
+data['GPS Location'] = data['Lat'] + ',' + data['Long']
+
+# Drop 'Lat' and 'Long' columns
+data = data.drop(columns=['Lat', 'Long'])
+
+# Create a new Excel file with data
+with pd.ExcelWriter('IntermediariGeolocation.xlsx') as writer:
+    data.to_excel(writer, sheet_name='${fileName}')
+EOF
+            """
+        }
+    }
+}
 
 
 
