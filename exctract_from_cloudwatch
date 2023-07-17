@@ -297,6 +297,34 @@ stage('Get IP Info') {
 
 
 
+stage('Create Excel File') {
+    steps {
+        script {
+            // Replace spaces in the name with underscores
+            def fileName = intName.replaceAll(' ', '_')
+
+            sh """
+            python3 -m venv venv
+            . venv/bin/activate
+            pip install pandas openpyxl
+
+            python3 <<EOF
+            import pandas as pd
+
+            # Read data from CSV file
+            data = pd.read_csv('${fileName}_ip_info.txt', header=None)
+
+            # Specify column names
+            data.columns = ['Indirizzo IP', 'Numero di Chiamate', 'Città', 'Regione', 'Coordinate GPS']
+
+            # Create a new Excel file with data
+            with pd.ExcelWriter('${fileName}_output.xlsx') as writer:
+                data.to_excel(writer, sheet_name='${fileName}')
+            EOF
+            """
+        }
+    }
+}
 
 
 
