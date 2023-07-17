@@ -360,6 +360,93 @@ EOF
 
 
 
+pipeline {
+    agent any
+    parameters {
+        text(name: 'USER_NAMES', defaultValue: 'Mario Rossi, Luigi Bianchi, ...', description: 'Inserisci i nomi degli utenti separati da virgole')
+    }
+    stages {
+        stage('Start Query') {
+            steps {
+                script {
+                    def userNames = params.USER_NAMES.split(',')
+                    for (userName in userNames) {
+                        def queryId = sh(script: "aws logs start-query --log-group-name 'log-group-name' --start-time \$(date -d '2023-05-01' +%s) --end-time \$(date -d '2023-06-30' +%s) --query-string 'fields @timestamp, @message | parse @message \"*,\" as ipAddress | filter @message like /INFO/ | filter @message like /${userName}/ | stats count() by ipAddress | jq -r '.queryId'", returnStdout: true).trim()
+                        def logs = sh(script: "aws logs get-query-results --query-id ${queryId} | jq -r '.results[] | map({(.field): .value}) | add' > ${userName}_logs.json", returnStdout: true).trim()
+                    }
+                }
+            }
+        }
+
+        stage('Get IP Info') {
+            steps {
+                script {
+                    def userNames = params.USER_NAMES.split(',')
+                    for (userName in userNames) {
+                        sh """
+                        rm -f ${userName}_ip_info.txt
+                        while IFS= read -r line; do
+                            if echo \$line | grep -q 'ipAddress'; then
+                                ip=\$(echo \$line | sed -n 's/.*ipAddress": "\\([^"]*\\)".*/\\1/p')
+                            elif echo \$line | grep -q 'count()'; then
+                                count=\$(echo \$line | sed -n 's/.*count()": "\\([^"]*\\)".*/\\1/p')
+                                if [[ -n \$ip && -n \$count ]]; then
+                                    ipInfo=\$(curl -s ipinfo.io/\${ip} | jq -r '[.city, .region, .loc] | join(",")')
+                                    echo "\${ip},\${count},\${ipInfo}" >> ${userName}_ip_info.txt
+                                    ip=""
+                                    count=""
+                                fi
+                            fi
+                        done < ${userName}_logs.json
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Create Excel File') {
+            steps {
+                script {
+                    sh """
+                    python3 -m venv myenv
+                    . myenv/bin/activate
+                    pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host=files.pythonhosted.org pandas openpyxl
+
+                    python3 <<EOF
+import pandas as pd
+import glob
+
+# Create a new Excel writer object
+with pd.ExcelWriter('IntermediariGeolocation.xlsx') as writer:
+    # Get a list of all ip_info.txt files
+    files = glob.glob('*_ip_info.txt')
+
+    # Loop over all files
+    for file in files:
+        # Read data from CSV file
+        data = pd.read_csv(file, header=None)
+
+        # Specify column names
+        data.columns = ['Indirizzo IP', 'Numero di Chiamate', 'Città', 'Regione', 'Latitudine', 'Longitudine']
+
+        # Convert 'Latitudine' and 'Longitudine' to string and combine them into 'Coordinate GPS'
+        data['Coordinate GPS'] = data['Latitudine'].astype(str) + ',' + data['Longitudine'].astype(str)
+
+        # Drop 'Latitudine' and 'Longitudine' columns
+        data = data.drop(columns=['Latitudine', 'Longitudine'])
+
+        # Get the user name from the file name
+        user_name = file.split('_ip_info.txt')[0]
+
+        # Write data to a new sheet in the Excel file
+        data.to_excel(writer, sheet_name=user_name, index=False)
+EOF
+                    """
+                }
+            }
+        }
+    }
+}
 
 
 
