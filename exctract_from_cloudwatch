@@ -245,6 +245,28 @@ stage('Get IP Info') {
 
 
 
+stage('Get IP Info') {
+    steps {
+        script {
+            sh '''
+            rm -f ip_info.txt
+            while IFS= read -r line; do
+                if echo $line | grep -q 'ipAddress'; then
+                    ip=$(echo $line | sed -n 's/.*ipAddress": "\\([^"]*\\)".*/\\1/p')
+                elif echo $line | grep -q 'count()'; then
+                    count=$(echo $line | sed -n 's/.*count()": "\\([^"]*\\)".*/\\1/p')
+                    if [[ -n $ip && -n $count ]]; then
+                        ipInfo=$(curl -s ipinfo.io/${ip} | jq -r '[.city, .region, .loc] | join(",")')
+                        echo "${ip},${count},${ipInfo}" >> ip_info.txt
+                        ip=""
+                        count=""
+                    fi
+                fi
+            done < logs.json
+            '''
+        }
+    }
+}
 
 
 
