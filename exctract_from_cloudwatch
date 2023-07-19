@@ -489,3 +489,10 @@ stage('Get Query Results') {
 
 fields @timestamp, @message | parse @message "*,*" as ipAddress | filter @message like /INFO/ and @message like /^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/ | stats count() by ipAddress
 
+def queryStatus = ''
+while (queryStatus != 'Complete') {
+    sleep 10  // Attendi 10 secondi prima di verificare nuovamente
+    queryStatus = sh(script: "aws logs get-query-results --query-id ${queryId} | jq -r '.status'", returnStdout: true).trim()
+}
+
+
