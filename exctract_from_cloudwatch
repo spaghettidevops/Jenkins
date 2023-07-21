@@ -496,3 +496,49 @@ while (queryStatus != 'Complete') {
 }
 
 
+pipeline {
+    agent any
+
+    parameters {
+        string(name: 'USER_NAMES', defaultValue: '', description: 'Lista di nomi utenti')
+        string(name: 'START_DATE', defaultValue: '', description: 'Data di inizio')
+        // ... altri parametri ...
+    }
+
+    stages {
+        stage('Validazione Parametri') {
+            steps {
+                script {
+                    // Controllo USER_NAMES
+                    if (params.USER_NAMES.trim().isEmpty()) {
+                        error("Il parametro USER_NAMES è vuoto o contiene solo spazi. La pipeline non verrà eseguita.")
+                    }
+
+                    // Controllo START_DATE
+                    def currentDate = new Date()
+                    def startDate = Date.parse("yyyy-MM-dd", params.START_DATE)
+                    def twoMonthsAgo = currentDate - 60  // sottrai 60 giorni dalla data corrente
+
+                    if (startDate.before(twoMonthsAgo)) {
+                        error("La START_DATE è una data più vecchia di due mesi. La pipeline non verrà eseguita.")
+                    }
+                }
+            }
+        }
+
+        // ... altre stages ...
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
