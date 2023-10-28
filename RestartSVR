@@ -1,0 +1,190 @@
+pipeline {
+    agent any
+
+    parameters {
+        choice(name: 'NODE_SELECTION', choices: ['node1.example.org', 'node2.example.org', 'node3.example.org', 'node4.example.org', 'node5.example.org'], description: 'Select node')
+    }
+
+    environment {
+        LB1_REMOVAL_ERROR = false
+        LB2_REMOVAL_ERROR = false
+        TOMCAT_RESTART_ERROR = false
+        LOG_VERIFICATION_ERROR = false
+        LB1_ADDITION_ERROR = false
+        LB2_ADDITION_ERROR = false
+        errorMessage = ""
+    }
+
+    stages {
+        stage('Remove from Load Balancers') {
+            steps {
+                script {
+                    // Stop Puppet on LB1
+                    sh """
+                        ssh -i /path/to/key_for_lb1.pem user@loadbalancer1.example.com "sudo systemctl stop puppet"
+                    """
+                    try {
+                        // Remove node from LB1
+                        sh """
+                            ssh -i /path/to/key_for_lb1.pem user@loadbalancer1.example.com "echo 'disable server backend1/${params.NODE_SELECTION}' | socat unix-connect:/var/run/haproxy.sock -"
+                            ssh -i /path/to/key_for_lb1.pem user@loadbalancer1.example.com "echo 'disable server backend2/${params.NODE_SELECTION}' | socat unix-connect:/var/run/haproxy.sock -"
+                            ssh -i /path/to/key_for_lb1.pem user@loadbalancer1.example.com "echo 'disable server backend3/${params.NODE_SELECTION}' | socat unix-connect:/var/run/haproxy.sock -"
+                        """
+                    } catch (Exception e) {
+                        LB1_REMOVAL_ERROR = true
+                        errorMessage += "Error removing node from loadbalancer1.example.com.\n"
+                        currentBuild.result = 'FAILURE'
+                        return
+                    }
+                    // Start Puppet on LB1
+                    sh """
+                        ssh -i /path/to/key_for_lb1.pem user@loadbalancer1.example.com "sudo systemctl start puppet"
+                    """
+                    
+                    // Stop Puppet on LB2
+                    sh """
+                        ssh -i /path/to/key_for_lb2.pem user@loadbalancer2.example.com "sudo systemctl stop puppet"
+                    """
+                    try {
+                        // Remove node from LB2
+                        sh """
+                            ssh -i /path/to/key_for_lb2.pem user@loadbalancer2.example.com "echo 'disable server backend1/${params.NODE_SELECTION}' | socat unix-connect:/var/run/haproxy.sock -"
+                        """
+                    } catch (Exception e) {
+                        LB2_REMOVAL_ERROR = true
+                        errorMessage += "Error removing node from loadbalancer2.example.com.\n"
+                        currentBuild.result = 'FAILURE'
+                        return
+                    }
+                    // Start Puppet on LB2
+                    sh """
+                        ssh -i /path/to/key_for_lb2.pem user@loadbalancer2.example.com "sudo systemctl start puppet"
+                    """
+                }
+            }
+        }
+
+        stage('Restart Tomcat') {
+            steps {
+                script {
+                    // Stop Puppet on node
+                    sh """
+                        ssh -i /path/to/node_key.pem user@${params.NODE_SELECTION} "sudo systemctl stop puppet"
+                    """
+                    try {
+                        // Restart Tomcat on node
+                        sh """
+                            ssh -i /path/to/node_key.pem user@${params.NODE_SELECTION} "sudo systemctl restart tomcat"
+                        """
+                    } catch (Exception e) {
+                        TOMCAT_RESTART_ERROR = true
+                        errorMessage += "Error restarting Tomcat on ${params.NODE_SELECTION}.\n"
+                        currentBuild.result = 'FAILURE'
+                        return
+                    }
+                    // Start Puppet on node
+                    sh """
+                        ssh -i /path/to/node_key.pem user@${params.NODE_SELECTION} "sudo systemctl start puppet"
+                    """
+                }
+            }
+        }
+
+        stage('Verify Tomcat Logs') {
+            steps {
+                script {
+                    try {
+                        timeout(time: 10, unit: 'MINUTES') {
+                            sh """
+                                ssh -i /path/to/node_key.pem user@${params.NODE_SELECTION} "tail -n 0 -f /path/to/catalina.out | grep -q 'policenter is ready'"
+                            """
+                        }
+                    } catch (Exception e) {
+                        LOG_VERIFICATION_ERROR = true
+                        errorMessage += "${params.NODE_SELECTION} didn't come online within 10 minutes.\n"
+                        currentBuild.result = 'FAILURE'
+                        return
+                    }
+                }
+            }
+        }
+
+        stage('Add back to Load Balancers') {
+            steps {
+                script {
+                    // Stop Puppet on LB1
+                    sh """
+                        ssh -i /path/to/key_for_lb1.pem user@loadbalancer1.example.com "sudo systemctl stop puppet"
+                    """
+                    try {
+                        // Add node to LB1
+                        sh """
+                            ssh -i /path/to/key_for_lb1.pem user@loadbalancer1.example.com "echo 'enable server backend1/${params.NODE_SELECTION}' | socat unix-connect:/var/run/haproxy.sock -"
+                            ssh -i /path/to/key_for_lb1.pem user@loadbalancer1.example.com "echo 'enable server backend2/${params.NODE_SELECTION}' | socat unix-connect:/var/run/haproxy.sock -"
+                            ssh -i /path/to/key_for_lb1.pem user@loadbalancer1.example.com "echo 'enable server backend3/${params.NODE_SELECTION}' | socat unix-connect:/var/run/haproxy.sock -"
+                        """
+                    } catch (Exception e) {
+                        LB1_ADDITION_ERROR = true
+                        errorMessage += "Error adding node to loadbalancer1.example.com.\n"
+                        currentBuild.result = 'FAILURE'
+                        return
+                    }
+                    // Start Puppet on LB1
+                    sh """
+                        ssh -i /path/to/key_for_lb1.pem user@loadbalancer1.example.com "sudo systemctl start puppet"
+                    """
+                    
+                    // Stop Puppet on LB2
+                    sh """
+                        ssh -i /path/to/key_for_lb2.pem user@loadbalancer2.example.com "sudo systemctl stop puppet"
+                    """
+                    try {
+                        // Add node to LB2
+                        sh """
+                            ssh -i /path/to/key_for_lb2.pem user@loadbalancer2.example.com "echo 'enable server backend1/${params.NODE_SELECTION}' | socat unix-connect:/var/run/haproxy.sock -"
+                        """
+                    } catch (Exception e) {
+                        LB2_ADDITION_ERROR = true
+                        errorMessage += "Error adding node to loadbalancer2.example.com.\n"
+                        currentBuild.result = 'FAILURE'
+                        return
+                    }
+                    // Start Puppet on LB2
+                    sh """
+                        ssh -i /path/to/key_for_lb2.pem user@loadbalancer2.example.com "sudo systemctl start puppet"
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        failure {
+            script {
+                def errorDetails = ""
+                if (LB1_REMOVAL_ERROR) {
+                    errorDetails += "Error removing node from loadbalancer1.example.com.\n"
+                }
+                if (LB2_REMOVAL_ERROR) {
+                    errorDetails += "Error removing node from loadbalancer2.example.com.\n"
+                }
+                if (TOMCAT_RESTART_ERROR) {
+                    errorDetails += "Error restarting Tomcat on ${params.NODE_SELECTION}.\n"
+                }
+                if (LOG_VERIFICATION_ERROR) {
+                    errorDetails += "${params.NODE_SELECTION} not back online within 10 minutes.\n"
+                }
+                if (LB1_ADDITION_ERROR) {
+                    errorDetails += "Error adding node to loadbalancer1\n"
+                }
+                if (LB2_ADDITION_ERROR) {
+                    errorDetails += "Error adding node to loadbalancer2\n"
+                }
+
+                mail body: "Jenkins pipeline error:\n${errorDetails}",
+                      subject: "Jenkins pipeline error for ${params.NODE_SELECTION}",
+                      to: "your-email@example.com"
+            }
+        }
+    }
+}
